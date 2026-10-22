@@ -19,13 +19,6 @@ A modern, interactive PDF annotation web application built with React and TypeSc
 - **📋 Annotation Management** — Search, sort, and review annotations by page.
 - **🔍 Zoom Controls** — Adjust the PDF zoom level for comfortable reading.
 
-## 🖥️ Application Preview
-
-The application provides a three-panel interface with annotation management on the left, document outline and page navigation in the center, and the PDF viewer on the right.
-
-<p align="center">
-  <img src="screenshots/pdf-annotator.png" alt="PDF Annotator application preview" width="100%">
-</p>
 
 ## 🛠️ Tech Stack
 
