@@ -1,523 +1,163 @@
-<<<<<<< HEAD
-# react-pdf-highlighter-plus
+# 📄 PDF Annotator
 
-<p align="center">
-  <a href="https://github.com/QuocVietHa08/react-pdf-highlighter-plus/stargazers">
-    <img src="https://img.shields.io/github/stars/QuocVietHa08/react-pdf-highlighter-plus?style=social" alt="GitHub stars">
-  </a>
-  <a href="https://github.com/QuocVietHa08/react-pdf-highlighter-plus/actions/workflows/node.js.yml">
-    <img src="https://github.com/QuocVietHa08/react-pdf-highlighter-plus/actions/workflows/node.js.yml/badge.svg" alt="Node.js CI">
-  </a>
-  <a href="https://badge.fury.io/js/react-pdf-highlighter-plus">
-    <img src="https://badge.fury.io/js/react-pdf-highlighter-plus.svg" alt="npm version">
-  </a>
-  <a href="https://www.npmjs.com/package/react-pdf-highlighter-plus">
-    <img src="https://img.shields.io/npm/dm/react-pdf-highlighter-plus.svg" alt="npm downloads">
-  </a>
-</p>
+A modern, interactive PDF annotation web application built with React and TypeScript. Read PDF documents, highlight important content, add notes, draw shapes, navigate document sections, and export annotated PDFs through a clean, user-friendly interface.
 
-<p align="center">
-  <strong>A powerful React library for annotating PDF documents</strong>
-</p>
+## ✨ Features
 
-<p align="center">
-  Text highlights • Area highlights • Freetext notes • Images & signatures • Freehand drawing • Shapes • Search • PDF export
-</p>
+- **📖 PDF Viewer** — Open and read PDF documents directly in the browser.
+- **🖍️ Text Highlighting** — Highlight important text and keep annotations organized.
+- **📝 Text Annotations** — Add notes and comments to selected content.
+- **🟨 Area Highlighting** — Highlight specific regions of a PDF page.
+- **✏️ Drawing Tools** — Annotate documents with drawing and shape tools.
+- **🖼️ Image Annotations** — Add image-based annotations.
+- **✍️ Editable Notes** — Create and edit free-text annotations.
+- **🔎 PDF Search** — Search document text and navigate through matching results.
+- **📑 Document Outline** — Navigate sections using the PDF table of contents.
+- **📃 Page Navigation** — Browse pages and access document thumbnails.
+- **🌙 Dark Mode** — Switch between light and dark viewing modes.
+- **📤 Export PDF** — Export your annotated document.
+- **📋 Annotation Management** — Search, sort, and review annotations by page.
+- **🔍 Zoom Controls** — Adjust the PDF zoom level for comfortable reading.
 
----
+## 🖥️ Application Preview
 
-## Overview
+The application provides a three-panel interface with annotation management on the left, document outline and page navigation in the center, and the PDF viewer on the right.
 
-`react-pdf-highlighter-plus` provides a highly customizable annotation experience for PDF documents in React applications. Built on [PDF.js](https://github.com/mozilla/pdf.js), it stores highlight positions in viewport-independent coordinates, making them portable across different screen sizes.
+![PDF Annotator application preview](<img width="1894" height="1060" alt="image" src="https://github.com/user-attachments/assets/3148e9c2-581e-41a3-b973-24eb3ce7711b" />
+)
 
-<p align="center">
-  <img src="docs/react-pdf-highlight-plus.png" alt="react-pdf-highlighter-plus internal architecture" width="900">
-</p>
+> To display the preview image, save a screenshot of your application as `pdf-annotator-preview.png` inside the `docs` folder.
 
-## Features
+## 🛠️ Tech Stack
 
-| Feature | Description |
-|---------|-------------|
-| **Text Highlights** | Select and highlight text passages, restyle them, and copy their text |
-| **Area Highlights** | Draw rectangular regions on PDFs and copy intersecting PDF text |
-| **Freetext Notes** | Draggable, editable sticky notes with custom styling and compact mode |
-| **Images & Signatures** | Upload images or draw signatures directly on PDFs |
-| **Freehand Drawing** | Draw freehand annotations with customizable stroke |
-| **Shapes** | Add rectangles, circles, and arrows with editable stroke style |
-| **PDF Search** | Search through all PDF text with next/previous navigation |
-| **PDF Export** | Export annotated PDF with all highlights embedded |
-| **Local PDF Worker** | Uses the packaged PDF.js worker by default |
-| **Light/Dark Theme** | Eye-friendly dark mode with customizable intensity |
-| **Zoom Support** | Full zoom functionality with position-independent data |
-| **Fully Customizable** | Exposed styling on all components |
+- **React** — Component-based user interface
+- **TypeScript** — Type-safe JavaScript development
+- **Vite** — Development server and build tooling
+- **PDF.js** — PDF rendering and document processing
+- **Tailwind CSS** — Utility-first styling
+- **Lucide React** — Icons
+- **PDF-related libraries** — PDF processing and annotation export
 
-## Quick Links
+## 🚀 Getting Started
 
-| Resource | Link |
-|----------|------|
-| Live Demo | [View Demo](https://quocvietha08.github.io/react-pdf-highlighter-plus/example-app/) |
-| Documentation | [API Docs](https://quocvietha08.github.io/react-pdf-highlighter-plus/docs/) |
-| NPM Package | [npm](https://www.npmjs.com/package/react-pdf-highlighter-plus) |
+### Prerequisites
 
----
+Install the following software:
 
-## Installation
+- [Node.js](https://nodejs.org/) — preferably an LTS version
+- npm — included with Node.js
+- [Git](https://git-scm.com/)
+
+### 1. Clone the repository
 
 ```bash
-npm install react-pdf-highlighter-plus
+git clone https://github.com/mohithshuka/pdf-annotation.git
+cd pdf-annotation
 ```
 
-### Import Styles
+### 2. Install dependencies
 
-```tsx
-import "react-pdf-highlighter-plus/style/style.css";
-```
-
-PDF.js worker setup is handled by the package by default. The build copies the local `pdf.worker.min.mjs` into the package output, so most apps do not need to configure `workerSrc` manually.
-
----
-
-## Quick Start
-
-### Basic Setup
-
-```tsx
-import {
-  PdfLoader,
-  PdfHighlighter,
-  TextHighlight,
-  AreaHighlight,
-  useHighlightContainerContext,
-} from "react-pdf-highlighter-plus";
-import "react-pdf-highlighter-plus/style/style.css";
-
-function App() {
-  const [highlights, setHighlights] = useState([]);
-
-  return (
-    <PdfLoader document="https://example.com/document.pdf">
-      {(pdfDocument) => (
-        <PdfHighlighter
-          pdfDocument={pdfDocument}
-          highlights={highlights}
-          enableAreaSelection={(e) => e.altKey}
-        >
-          <HighlightContainer />
-        </PdfHighlighter>
-      )}
-    </PdfLoader>
-  );
-}
-
-function HighlightContainer() {
-  const { highlight, isScrolledTo } = useHighlightContainerContext();
-
-  return highlight.type === "text" ? (
-    <TextHighlight highlight={highlight} isScrolledTo={isScrolledTo} />
-  ) : (
-    <AreaHighlight highlight={highlight} isScrolledTo={isScrolledTo} />
-  );
-}
-```
-
----
-
-## Highlight Types
-
-### 1. Text Highlights
-
-Select text in the PDF to create highlights.
-
-```tsx
-<TextHighlight
-  highlight={highlight}
-  isScrolledTo={isScrolledTo}
-  style={{ background: "rgba(255, 226, 143, 1)" }}
-/>
-```
-
-Text and area highlight toolbars include a copy button. After copying, the icon changes to a check mark for 1.5 seconds.
-
-[Full Documentation →](docs/text-area-highlights.md)
-
-### 2. Area Highlights
-
-Hold `Alt` and drag to create rectangular highlights.
-
-```tsx
-<PdfHighlighter
-  enableAreaSelection={(event) => event.altKey}
-  // ...
->
-```
-
-### 3. Freetext Notes
-
-Create draggable, editable text annotations with customizable styling.
-
-```tsx
-import { FreetextHighlight } from "react-pdf-highlighter-plus";
-
-<PdfHighlighter
-  enableFreetextCreation={() => freetextMode}
-  onFreetextClick={(position) => {
-    addHighlight({ type: "freetext", position, content: { text: "Note" } });
-  }}
->
-
-// In your highlight container:
-<FreetextHighlight
-  highlight={highlight}
-  onChange={handlePositionChange}
-  onTextChange={handleTextChange}
-  onStyleChange={handleStyleChange}
-  color="#333333"
-  backgroundColor="#ffffc8"
-  fontSize="14px"
-/>
-```
-
-**Features:**
-- Drag to reposition
-- Click to edit text
-- Built-in style panel (colors, font size, font family)
-- Toolbar appears on hover
-
-[Full Documentation →](docs/freetext-highlights.md)
-
-### 4. Images & Signatures
-
-Upload images or draw signatures and place them on PDFs.
-
-```tsx
-import { ImageHighlight, SignaturePad } from "react-pdf-highlighter-plus";
-
-// Signature pad modal
-<SignaturePad
-  isOpen={isOpen}
-  onComplete={(dataUrl) => setPendingImage(dataUrl)}
-  onClose={() => setIsOpen(false)}
-/>
-
-// In your highlight container:
-<ImageHighlight
-  highlight={highlight}
-  onChange={handlePositionChange}
-  onEditStart={() => toggleEditInProgress(true)}
-  onEditEnd={() => toggleEditInProgress(false)}
-/>
-```
-
-**Features:**
-- Upload any image format
-- Draw signatures with mouse or touch
-- Drag to reposition
-- Resize while maintaining aspect ratio
-- Toolbar appears on hover
-
-[Full Documentation →](docs/image-signature-highlights.md)
-
-### 5. Freehand Drawing
-
-Draw freehand annotations directly on PDFs.
-
-```tsx
-import { DrawingHighlight } from "react-pdf-highlighter-plus";
-
-<PdfHighlighter
-  enableDrawingMode={drawingMode}
-  onDrawingComplete={(dataUrl, position, strokes) => {
-    addHighlight({ type: "drawing", position, content: { image: dataUrl } });
-  }}
-  drawingStrokeColor="#ff0000"
-  drawingStrokeWidth={2}
->
-
-// In your highlight container:
-<DrawingHighlight
-  highlight={highlight}
-  onChange={handlePositionChange}
-/>
-```
-
-**Features:**
-- Freehand drawing with mouse or touch
-- Customizable stroke color and width
-- Stored as PNG for PDF export compatibility
-- Drag to reposition
-
-[Full Documentation →](docs/drawing-highlights.md)
-
----
-
-## Shapes
-
-Create rectangle, circle, and arrow annotations with editable stroke color and width.
-
-```tsx
-<PdfHighlighter
-  enableShapeMode={shapeMode} // "rectangle" | "circle" | "arrow" | null
-  onShapeComplete={(position, shape) => {
-    addHighlight({ type: "shape", position, content: { shape } });
-  }}
-  shapeStrokeColor="#000000"
-  shapeStrokeWidth={2}
->
-  <HighlightContainer />
-</PdfHighlighter>
-```
-
-Shape geometry stays in the normal highlight layer while the style controls render in the higher config layer.
-
-[Full Documentation →](docs/shape-highlights.md)
-
----
-
-## PDF Search
-
-Use `utilsRef` to access document-wide search helpers backed by PDF.js `PDFFindController`.
-
-```tsx
-const highlighterUtilsRef = useRef<PdfHighlighterUtils>();
-
-<PdfHighlighter
-  pdfDocument={pdfDocument}
-  highlights={highlights}
-  utilsRef={(utils) => (highlighterUtilsRef.current = utils)}
->
-  <HighlightContainer />
-</PdfHighlighter>
-
-highlighterUtilsRef.current?.search("TypeScript", {
-  highlightAll: true,
-  caseSensitive: false,
-});
-highlighterUtilsRef.current?.findNext();
-highlighterUtilsRef.current?.clearSearch();
-```
-
----
-
-## Light/Dark Theme
-
-Toggle between light and dark modes with customizable styling for comfortable reading.
-
-```tsx
-// Enable dark mode
-<PdfHighlighter
-  pdfDocument={pdfDocument}
-  theme={{ mode: "dark" }}
-  highlights={highlights}
->
-  <HighlightContainer />
-</PdfHighlighter>
-
-// Customize dark mode intensity and colors
-<PdfHighlighter
-  pdfDocument={pdfDocument}
-  theme={{
-    mode: "dark",
-    darkModeInvertIntensity: 0.85,  // Softer (0.8-1.0)
-    containerBackgroundColor: "#3a3a3a",
-    scrollbarThumbColor: "#6b6b6b",
-    scrollbarTrackColor: "#2c2c2c",
-  }}
-  highlights={highlights}
->
-  <HighlightContainer />
-</PdfHighlighter>
-```
-
-**Features:**
-- Eye-friendly dark mode using CSS filter inversion
-- Customizable inversion intensity (0.8-1.0)
-- Preserve original highlight colors in dark mode
-- Custom scrollbar styling
-- Full theming control for container background
-
-**Inversion Intensity Guide:**
-| Value | Result | Use Case |
-|-------|--------|----------|
-| `1.0` | Pure black | High contrast |
-| `0.9` | Dark gray (~#1a1a1a) | **Recommended** |
-| `0.85` | Softer gray (~#262626) | Long reading sessions |
-| `0.8` | Medium gray (~#333333) | Maximum comfort |
-
-[Full Documentation →](docs/theming.md)
-
----
-
-## PDF Export
-
-Export your annotated PDF with all highlights embedded.
-
-```tsx
-import { exportPdf } from "react-pdf-highlighter-plus";
-
-const handleExport = async () => {
-  const pdfBytes = await exportPdf(pdfUrl, highlights, {
-    textHighlightColor: "rgba(255, 226, 143, 0.5)",
-    areaHighlightColor: "rgba(255, 226, 143, 0.5)",
-    onProgress: (current, total) => console.log(`${current}/${total} pages`),
-  });
-
-  // Download the file
-  const blob = new Blob([pdfBytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "annotated.pdf";
-  a.click();
-  URL.revokeObjectURL(url);
-};
-```
-
-**Supported highlight types:**
-- Text highlights (colored rectangles)
-- Area highlights (colored rectangles)
-- Freetext notes (background + wrapped text)
-- Images & signatures (embedded PNG/JPG)
-- Freehand drawings (embedded PNG)
-- Shapes (rectangle, circle, arrow)
-
-[Full Documentation →](docs/pdf-export.md)
-
----
-
-## Component Architecture
-
-The package renders React annotation components into PDF.js page overlay layers:
-
-| Layer | Mount point | Purpose |
-|-------|-------------|---------|
-| `.PdfHighlighter__highlight-layer` | Inside PDF.js `.textLayer` | Annotation geometry for text, area, image/signature, drawing, and shape |
-| `.PdfHighlighter__note-layer` | Direct child of PDF.js `.page` | Freetext notes and compact note markers above PDF content |
-| `.PdfHighlighter__config-layer` | Direct child of PDF.js `.page` | Toolbars, style panels, copy buttons, and controls above PDF content |
-
-Internal flow diagram:
-
-- [Architecture PNG](docs/react-pdf-highlight-plus.png)
-- [Draw.io source](docs/package-build-and-features.drawio)
-- [Draw.io XML copy](docs/package-build-and-features.xml)
-
-### Context Hooks
-
-| Hook | Purpose |
-|------|---------|
-| `usePdfHighlighterContext()` | Viewer utilities: `scrollToHighlight`, `setTip`, `getCurrentSelection` |
-| `useHighlightContainerContext()` | Per-highlight utilities: `highlight`, `viewportToScaled`, `screenshot` |
-
----
-
-## Coordinate Systems
-
-The library uses two coordinate systems:
-
-| System | Description | Use Case |
-|--------|-------------|----------|
-| **Viewport** | Pixel coordinates relative to current zoom | Rendering on screen |
-| **Scaled** | Normalized (0-1) coordinates relative to page | Storage & retrieval |
-
-```tsx
-// Converting between systems
-const { viewportToScaled } = useHighlightContainerContext();
-
-// Save position (viewport → scaled)
-const scaledPosition = viewportToScaled(boundingRect);
-
-// Highlights are automatically converted to viewport when rendering
-```
-
----
-
-## Customization
-
-### Custom Highlight Interface
-
-```tsx
-interface MyHighlight extends Highlight {
-  category: string;
-  comment?: string;
-  author?: string;
-}
-
-// Use the generic type
-const { highlight } = useHighlightContainerContext<MyHighlight>();
-```
-
-### Custom Styling
-
-```tsx
-// Via props
-<TextHighlight
-  highlight={highlight}
-  style={{ background: categoryColors[highlight.category] }}
-/>
-
-// Via CSS classes
-.TextHighlight { }
-.AreaHighlight { }
-.FreetextHighlight { }
-.ImageHighlight { }
-.DrawingHighlight { }
-```
-
-### Tips and Popups
-
-```tsx
-import { MonitoredHighlightContainer } from "react-pdf-highlighter-plus";
-
-<MonitoredHighlightContainer
-  highlightTip={{
-    position: highlight.position,
-    content: <MyPopup highlight={highlight} />,
-  }}
->
-  <TextHighlight highlight={highlight} />
-</MonitoredHighlightContainer>
-```
-
----
-
-## Running Locally
+From the project root, run:
 
 ```bash
-git clone https://github.com/QuocVietHa08/react-pdf-highlighter-plus.git
-cd react-pdf-highlighter-plus
 npm install
+```
+
+### 3. Start the development server
+
+```bash
 npm run dev
 ```
 
+Open the local URL displayed in your terminal. The project configuration typically uses:
+
+```text
+http://localhost:3000
+```
+
+Use the actual URL printed by Vite if it differs.
+
+### 4. Build the project
+
+To build the library and example application using the project's configured build process, run:
+
+```bash
+npm run build
+```
+
+For the Vercel-specific build script, use:
+
+```bash
+npm run build:vercel
+```
+
+## 📘 How to Use
+
+1. **Open a PDF:** Click **Open PDF** and select a document.
+2. **Navigate the document:** Use the outline, page navigation, or search tools.
+3. **Annotate content:** Select text or use the available annotation tools.
+4. **Manage annotations:** Review highlights, search annotations, and organize them by page.
+5. **Customize your view:** Adjust zoom and switch between light and dark modes.
+6. **Export your work:** Click **Export PDF** to save the annotated document.
+
+*Available tools and export behavior may depend on the current implementation.*
+
+## 📂 Project Structure
+
+```text
+pdf-annotation/
+├── docs/                  # Documentation
+├── example/               # Example application
+│   ├── src/               # Example source code
+│   ├── index.html         # Example HTML entry point
+│   └── vite.config.ts     # Vite configuration
+├── src/                   # PDF annotation library source
+│   ├── components/        # React components
+│   ├── hooks/             # Custom React hooks
+│   ├── lib/               # PDF utilities and helpers
+│   ├── style/             # Component styles
+│   ├── index.ts           # Library entry point
+│   └── types.ts           # TypeScript types
+├── package.json
+├── tsconfig.json
+└── vite.config.ts         # Example-specific configuration
+```
+
+## 🌐 Deployment
+
+The application can be deployed to platforms such as [Vercel](https://vercel.com/).
+
+For this repository, configure Vercel using the root project directory and verify that the build completes successfully before setting the generated static output directory.
+
+## 🔮 Future Improvements
+
+- Cloud storage for PDF documents and annotations
+- User authentication and personalized workspaces
+- Automatic saving and restoration of annotations
+- Collaborative annotation and document sharing
+- Additional annotation tools and customization options
+- Improved mobile and tablet support
+
+## 🤝 Contributing
+
+Contributions, bug reports, and feature suggestions are welcome.
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Make your changes and test them.
+4. Submit a pull request describing your improvements.
+
+## 📄 License
+
+This project uses the MIT License inherited from the underlying `react-pdf-highlighter-plus` project. Check the repository's `LICENSE` file for the applicable terms.
+
+## 👨‍💻 Author
+
+**Mohith Shuka**
+
+- GitHub: [@mohithshuka](https://github.com/mohithshuka)
+- Project: [PDF Annotator](https://github.com/mohithshuka/pdf-annotation)
+
 ---
 
-## API Reference
-
-See the full [API Reference](docs/api-reference.md) for detailed documentation on all components and types.
-
----
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-For bugs, please [open an issue](https://github.com/QuocVietHa08/react-pdf-highlighter-plus/issues) with clear reproduction steps.
-
----
-
-## License
-
-MIT
-
----
-
-## Credits
-
-Originally forked from [`react-pdf-highlighter`](https://github.com/agentcooper/react-pdf-highlighter) with significant architectural changes including context-based APIs, zoom support, freetext/image/drawing highlights, and PDF export functionality.
-=======
-# pdf-annotation
->>>>>>> ef8ca2d04d3785c80c2e325124790de4f0121e42
+⭐ If you find this project useful, consider giving the repository a star!
