@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # react-pdf-highlighter-plus
 
 <p align="center">
@@ -517,3 +518,6 @@ MIT
 ## Credits
 
 Originally forked from [`react-pdf-highlighter`](https://github.com/agentcooper/react-pdf-highlighter) with significant architectural changes including context-based APIs, zoom support, freetext/image/drawing highlights, and PDF export functionality.
+=======
+# pdf-annotation
+>>>>>>> ef8ca2d04d3785c80c2e325124790de4f0121e42
