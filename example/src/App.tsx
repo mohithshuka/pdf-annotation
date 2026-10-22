@@ -1,0 +1,763 @@
+import React, { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
+import CommentForm from "./CommentForm";
+import ContextMenu, { ContextMenuProps } from "./ContextMenu";
+import ExpandableTip from "./ExpandableTip";
+import HighlightContainer from "./HighlightContainer";
+import Sidebar from "./Sidebar";
+import { Header } from "./components/Header";
+import { FloatingActions } from "./components/FloatingActions";
+import {
+  DrawingStroke,
+  GhostHighlight,
+  Highlight,
+  LeftPanel,
+  PdfHighlighter,
+  PdfHighlighterUtils,
+  PdfLoader,
+  ScaledPosition,
+  ShapeData,
+  ShapeType,
+  SignaturePad,
+  Tip,
+  ViewportHighlight,
+  extractPageTextItems,
+  extractSentences,
+  extractTextUnits,
+} from "./react-pdf-highlighter-extended";
+import "./style/App.css";
+import { CommentedHighlight } from "./types";
+
+const PRIMARY_PDF_URL = "https://arxiv.org/pdf/2203.11115";
+const SECONDARY_PDF_URL = "https://arxiv.org/pdf/1604.02480";
+type TestHighlights = Record<string, CommentedHighlight[]>;
+
+type SearchStatus = {
+  current: number;
+  total: number;
+  isPending: boolean;
+};
+
+const parsePageSelection = (input: string): "all" | number[] => {
+  const trimmedInput = input.trim().toLowerCase();
+  if (!trimmedInput || trimmedInput === "all") return "all";
+
+  const pages = new Set<number>();
+
+  trimmedInput.split(",").forEach((part) => {
+    const trimmedPart = part.trim();
+    if (!trimmedPart) return;
+
+    const rangeMatch = trimmedPart.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (rangeMatch) {
+      const start = Number(rangeMatch[1]);
+      const end = Number(rangeMatch[2]);
+      const firstPage = Math.min(start, end);
+      const lastPage = Math.max(start, end);
+
+      for (let page = firstPage; page <= lastPage; page += 1) {
+        pages.add(page);
+      }
+
+      return;
+    }
+
+    const page = Number(trimmedPart);
+    if (Number.isInteger(page) && page > 0) {
+      pages.add(page);
+    }
+  });
+
+  return pages.size > 0 ? Array.from(pages).sort((a, b) => a - b) : "all";
+};
+
+const downloadJson = (data: unknown, filename: string) => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json",
+  });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(downloadUrl);
+};
+
+const getNextId = () => String(Math.random()).slice(2);
+
+const parseIdFromHash = () => {
+  return document.location.hash.slice("#highlight-".length);
+};
+
+const resetHash = () => {
+  document.location.hash = "";
+};
+
+const App = () => {
+  const [url, setUrl] = useState<string | Uint8Array>(PRIMARY_PDF_URL);
+  const [highlights, setHighlights] = useState<Array<CommentedHighlight>>([]);
+  const testHighlightsRef = useRef<TestHighlights>({});
+  const currentPdfIndexRef = useRef(0);
+  const [contextMenu, setContextMenu] = useState<ContextMenuProps | null>(null);
+  const [pdfScaleValue, setPdfScaleValue] = useState<number | undefined>(
+    undefined,
+  );
+  const [highlightPen, setHighlightPen] = useState<boolean>(false);
+  const [freetextMode, setFreetextMode] = useState<boolean>(false);
+  const [noteCompactMode, setNoteCompactMode] = useState<boolean>(false);
+  const [imageMode, setImageMode] = useState<boolean>(false);
+  const [areaMode, setAreaMode] = useState<boolean>(false);
+  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState<boolean>(false);
+  const [pendingImageData, setPendingImageData] = useState<string | null>(null);
+  // Drawing mode state
+  const [drawingMode, setDrawingMode] = useState<boolean>(false);
+  const [drawingStrokeColor, setDrawingStrokeColor] = useState<string>("#000000");
+  const [drawingStrokeWidth, setDrawingStrokeWidth] = useState<number>(3);
+  // Shape mode state
+  const [shapeMode, setShapeMode] = useState<ShapeType | null>(null);
+  const [shapeStrokeColor, setShapeStrokeColor] = useState<string>("#000000");
+  const [shapeStrokeWidth, setShapeStrokeWidth] = useState<number>(2);
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [scrolledToHighlightId, setScrolledToHighlightId] = useState<string | null>(null);
+  // Left panel state
+  const [leftPanelOpen, setLeftPanelOpen] = useState<boolean>(true);
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchStatus, setSearchStatus] = useState<SearchStatus>({
+    current: 0,
+    total: 0,
+    isPending: false,
+  });
+  const [isExtractingSentences, setIsExtractingSentences] = useState(false);
+  const [extractedSentenceCount, setExtractedSentenceCount] = useState(0);
+  const [sentenceExtractionPages, setSentenceExtractionPages] = useState("all");
+
+  // Refs for PdfHighlighter utilities
+  const highlighterUtilsRef = useRef<PdfHighlighterUtils | null>(null);
+  const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
+  const [, forceUpdate] = useState({});
+  const hasInitializedUtilsRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset utils initialization flag when URL changes so forceUpdate triggers again
+  useEffect(() => {
+    hasInitializedUtilsRef.current = false;
+    setSearchQuery("");
+    setSearchStatus({ current: 0, total: 0, isPending: false });
+    setExtractedSentenceCount(0);
+    setSentenceExtractionPages("all");
+  }, [url]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    import("./test-highlights").then(({ testHighlights }) => {
+      if (cancelled) return;
+      testHighlightsRef.current = testHighlights;
+      setHighlights(testHighlights[PRIMARY_PDF_URL] ?? []);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const eventBus = highlighterUtilsRef.current?.getEventBus();
+    if (
+      !eventBus ||
+      typeof (eventBus as { on?: unknown }).on !== "function" ||
+      typeof (eventBus as { off?: unknown }).off !== "function"
+    ) {
+      return;
+    }
+
+    const typedEventBus = eventBus as {
+      on: (eventName: string, callback: (event: any) => void) => void;
+      off: (eventName: string, callback: (event: any) => void) => void;
+    };
+
+    const handleFindState = (event: {
+      state?: number;
+      matchesCount?: { current?: number; total?: number };
+    }) => {
+      setSearchStatus({
+        current: event.matchesCount?.current ?? 0,
+        total: event.matchesCount?.total ?? 0,
+        isPending: event.state === 3,
+      });
+    };
+
+    const handleMatchesCount = (event: {
+      matchesCount?: { current?: number; total?: number };
+    }) => {
+      setSearchStatus((previous) => ({
+        ...previous,
+        current: event.matchesCount?.current ?? 0,
+        total: event.matchesCount?.total ?? 0,
+      }));
+    };
+
+    typedEventBus.on("updatefindcontrolstate", handleFindState);
+    typedEventBus.on("updatefindmatchescount", handleMatchesCount);
+
+    return () => {
+      typedEventBus.off("updatefindcontrolstate", handleFindState);
+      typedEventBus.off("updatefindmatchescount", handleMatchesCount);
+    };
+  });
+
+  const toggleDocument = () => {
+    const urls = [PRIMARY_PDF_URL, SECONDARY_PDF_URL];
+    currentPdfIndexRef.current = (currentPdfIndexRef.current + 1) % urls.length;
+    setUrl(urls[currentPdfIndexRef.current]);
+    setHighlights(testHighlightsRef.current[urls[currentPdfIndexRef.current]] ?? []);
+  };
+
+  const handleLoadLocalPdf = (file: File) => {
+    console.log(`Loading local PDF: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const arrayBuffer = e.target?.result as ArrayBuffer;
+      const uint8Array = new Uint8Array(arrayBuffer);
+      setUrl(uint8Array);
+      setHighlights([]); // Clear highlights for new document
+      console.log(`PDF loaded: ${file.name}`);
+    };
+    reader.onerror = () => {
+      console.error("Failed to read PDF file");
+      alert("Failed to read PDF file");
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Click listeners for context menu
+  useEffect(() => {
+    const handleClick = () => {
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener("click", handleClick);
+
+    return () => {
+      document.removeEventListener("click", handleClick);
+    };
+  }, [contextMenu]);
+
+  // Track scrolled highlight from hash
+  useEffect(() => {
+    const handleHashChange = () => {
+      const id = parseIdFromHash();
+      setScrolledToHighlightId(id || null);
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    handleHashChange(); // Check initial hash
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  const handleContextMenu = (
+    event: MouseEvent<HTMLDivElement>,
+    highlight: ViewportHighlight<CommentedHighlight>,
+  ) => {
+    event.preventDefault();
+
+    setContextMenu({
+      xPos: event.clientX,
+      yPos: event.clientY,
+      deleteHighlight: () => deleteHighlight(highlight),
+      editComment: () => editComment(highlight),
+    });
+  };
+
+  const addHighlight = (highlight: GhostHighlight, comment: string) => {
+    console.log("Saving highlight", highlight);
+    setHighlights([{ ...highlight, comment, id: getNextId() }, ...highlights]);
+  };
+
+  const deleteHighlight = (highlight: ViewportHighlight | Highlight | CommentedHighlight) => {
+    console.log("Deleting highlight", highlight);
+    setHighlights(highlights.filter((h) => h.id != highlight.id));
+  };
+
+  const editHighlight = (
+    idToUpdate: string,
+    edit: Partial<CommentedHighlight>,
+  ) => {
+    console.log(`Editing highlight ${idToUpdate} with `, edit);
+    setHighlights(
+      highlights.map((highlight) =>
+        highlight.id === idToUpdate ? { ...highlight, ...edit } : highlight,
+      ),
+    );
+  };
+
+  const handleFreetextClick = (position: ScaledPosition) => {
+    console.log("Creating freetext highlight", position);
+    const newHighlight: CommentedHighlight = {
+      id: getNextId(),
+      type: "freetext",
+      position,
+      content: { text: "New note" },
+      comment: "",
+    };
+    setHighlights([newHighlight, ...highlights]);
+    setFreetextMode(false); // Exit mode after creating
+  };
+
+  const handleImageClick = (position: ScaledPosition) => {
+    console.log("Creating image highlight", position);
+    if (pendingImageData) {
+      // Load image to get its natural dimensions
+      const img = new Image();
+      img.onload = () => {
+        const imageAspect = img.naturalWidth / img.naturalHeight;
+        const boundingRect = position.boundingRect;
+
+        // Keep the width from click position, adjust height to maintain aspect ratio
+        const currentWidth = boundingRect.x2 - boundingRect.x1;
+        const adjustedHeight = currentWidth / imageAspect;
+
+        // Create adjusted position with correct aspect ratio
+        const adjustedPosition: ScaledPosition = {
+          ...position,
+          boundingRect: {
+            ...boundingRect,
+            y2: boundingRect.y1 + adjustedHeight,
+          },
+          rects: position.rects.map(rect => ({
+            ...rect,
+            y2: rect.y1 + adjustedHeight,
+          })),
+        };
+
+        const newHighlight: CommentedHighlight = {
+          id: getNextId(),
+          type: "image",
+          position: adjustedPosition,
+          content: { image: pendingImageData },
+          comment: "",
+        };
+        setHighlights([newHighlight, ...highlights]);
+        setPendingImageData(null);
+        setImageMode(false);
+      };
+      img.src = pendingImageData;
+    }
+  };
+
+  const handleAddImage = () => {
+    // Trigger file input click
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        console.log("Image loaded, entering image mode");
+        setPendingImageData(dataUrl);
+        setImageMode(true);
+      };
+      reader.readAsDataURL(file);
+    }
+    // Reset the input so the same file can be selected again
+    event.target.value = "";
+  };
+
+  const handleAddSignature = () => {
+    setIsSignaturePadOpen(true);
+  };
+
+  const handleSignatureComplete = (dataUrl: string) => {
+    console.log("Signature complete, entering image mode");
+    setPendingImageData(dataUrl);
+    setIsSignaturePadOpen(false);
+    setImageMode(true);
+  };
+
+  const handleDrawingComplete = (dataUrl: string, position: ScaledPosition, strokes: DrawingStroke[]) => {
+    console.log("Drawing complete", position, "with", strokes.length, "strokes");
+    const newHighlight: CommentedHighlight = {
+      id: getNextId(),
+      type: "drawing",
+      position,
+      content: { image: dataUrl, strokes },
+      comment: "",
+    };
+    setHighlights([newHighlight, ...highlights]);
+    setDrawingMode(false);
+  };
+
+  const handleDrawingCancel = () => {
+    console.log("Drawing cancelled");
+    setDrawingMode(false);
+  };
+
+  const handleShapeComplete = (position: ScaledPosition, shape: ShapeData) => {
+    console.log("Shape complete", shape.shapeType, position);
+    const newHighlight: CommentedHighlight = {
+      id: getNextId(),
+      type: "shape",
+      position,
+      content: { shape },
+      shapeType: shape.shapeType,
+      strokeColor: shape.strokeColor,
+      strokeWidth: shape.strokeWidth,
+      comment: "",
+    };
+    setHighlights([newHighlight, ...highlights]);
+    setShapeMode(null);
+  };
+
+  const handleShapeCancel = () => {
+    console.log("Shape cancelled");
+    setShapeMode(null);
+  };
+
+  const handleExportPdf = async () => {
+    console.log("Exporting PDF with annotations...");
+    try {
+      const { exportPdf } = await import("./react-pdf-highlighter-extended");
+      const pdfBytes = await exportPdf(url, highlights, {
+        onProgress: (current, total) => {
+          console.log(`Exporting page ${current}/${total}`);
+        },
+      });
+
+      // Download the file
+      const blob = new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = "annotated-document.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+
+      console.log("PDF exported successfully!");
+    } catch (error) {
+      console.error("Failed to export PDF:", error);
+      alert("Failed to export PDF. See console for details.");
+    }
+  };
+
+  const handleZoomIn = () => {
+    const currentScale = pdfScaleValue || 1;
+    setPdfScaleValue(Math.min(currentScale + 0.25, 3));
+  };
+
+  const handleZoomOut = () => {
+    const currentScale = pdfScaleValue || 1;
+    setPdfScaleValue(Math.max(currentScale - 0.25, 0.5));
+  };
+
+  const handleSearchSubmit = () => {
+    const query = searchQuery.trim();
+
+    if (!query) {
+      highlighterUtilsRef.current?.clearSearch();
+      setSearchStatus({ current: 0, total: 0, isPending: false });
+      return;
+    }
+
+    setSearchStatus((previous) => ({ ...previous, isPending: true }));
+    highlighterUtilsRef.current?.search(query, { highlightAll: true });
+  };
+
+  const handleSearchClear = () => {
+    setSearchQuery("");
+    setSearchStatus({ current: 0, total: 0, isPending: false });
+    highlighterUtilsRef.current?.clearSearch();
+  };
+
+  const handleExtractSentences = async () => {
+    const pdfDocument = pdfDocumentRef.current;
+    if (!pdfDocument || isExtractingSentences) return;
+
+    setIsExtractingSentences(true);
+
+    try {
+      const pages = parsePageSelection(sentenceExtractionPages);
+      const extractionOptions = {
+        pages,
+      };
+      const [extractedPages, textUnits, sentences] = await Promise.all([
+        extractPageTextItems(pdfDocument, extractionOptions),
+        extractTextUnits(pdfDocument, extractionOptions),
+        extractSentences(pdfDocument, extractionOptions),
+      ]);
+      const exportPayload = {
+        pageSelection: pages,
+        pages: extractedPages.map((page) => ({
+          pageNumber: page.pageNumber,
+          width: page.width,
+          height: page.height,
+          columns: page.columns ?? [],
+          textUnits: textUnits.filter(
+            (unit) => unit.pageNumber === page.pageNumber,
+          ),
+          sentences: sentences.filter(
+            (sentence) => sentence.pageNumber === page.pageNumber,
+          ),
+        })),
+      };
+      const pageLabel = Array.isArray(pages) ? pages.join("-") : "all";
+
+      console.log("Extracted PDF text units", textUnits);
+      console.log("Extracted PDF sentences", sentences);
+      setExtractedSentenceCount(sentences.length);
+      downloadJson(exportPayload, `pdf-sentences-${pageLabel}.json`);
+    } catch (error) {
+      console.error("Failed to extract sentences:", error);
+      alert("Failed to extract sentences. See console for details.");
+    } finally {
+      setIsExtractingSentences(false);
+    }
+  };
+
+  const resetHighlights = () => {
+    setHighlights([]);
+  };
+
+  const getHighlightById = useCallback((id: string) => {
+    return highlights.find((highlight) => highlight.id === id);
+  }, [highlights]);
+
+  // Open comment tip and update highlight with new user input
+  const editComment = (highlight: ViewportHighlight<CommentedHighlight>) => {
+    if (!highlighterUtilsRef.current) return;
+
+    const editCommentTip: Tip = {
+      position: highlight.position,
+      content: (
+        <CommentForm
+          placeHolder={highlight.comment}
+          onSubmit={(input) => {
+            editHighlight(highlight.id, { comment: input });
+            highlighterUtilsRef.current!.setTip(null);
+            highlighterUtilsRef.current!.toggleEditInProgress(false);
+          }}
+        ></CommentForm>
+      ),
+    };
+
+    highlighterUtilsRef.current.setTip(editCommentTip);
+    highlighterUtilsRef.current.toggleEditInProgress(true);
+  };
+
+  // Handle editing from sidebar - scroll to highlight first, then prompt user
+  const handleEditFromSidebar = (highlight: CommentedHighlight) => {
+    // Update the hash to scroll to the highlight
+    document.location.hash = `highlight-${highlight.id}`;
+    // The actual edit tip will need to be triggered after scrolling
+    // For now, we just scroll - user can right-click to edit
+  };
+
+  // Scroll to highlight based on hash in the URL
+  const scrollToHighlightFromHash = useCallback(() => {
+    const highlight = getHighlightById(parseIdFromHash());
+
+    if (highlight && highlighterUtilsRef.current) {
+      highlighterUtilsRef.current.scrollToHighlight(highlight);
+    }
+  }, [getHighlightById]);
+
+  // Hash listeners for autoscrolling to highlights
+  useEffect(() => {
+    window.addEventListener("hashchange", scrollToHighlightFromHash);
+
+    return () => {
+      window.removeEventListener("hashchange", scrollToHighlightFromHash);
+    };
+  }, [scrollToHighlightFromHash]);
+
+  return (
+    <div className="flex h-screen flex-col bg-background">
+      {/* Header */}
+      <Header
+        pdfScaleValue={pdfScaleValue}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onExportPdf={handleExportPdf}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onLoadLocalPdf={handleLoadLocalPdf}
+        searchQuery={searchQuery}
+        searchCurrent={searchStatus.current}
+        searchTotal={searchStatus.total}
+        isSearchPending={searchStatus.isPending}
+        noteCompactMode={noteCompactMode}
+        onSearchQueryChange={setSearchQuery}
+        onSearchSubmit={handleSearchSubmit}
+        onSearchNext={() => highlighterUtilsRef.current?.findNext()}
+        onSearchPrevious={() => highlighterUtilsRef.current?.findPrevious()}
+        onSearchClear={handleSearchClear}
+        onToggleNoteCompactMode={() => setNoteCompactMode(!noteCompactMode)}
+        onExtractSentences={handleExtractSentences}
+        isExtractingSentences={isExtractingSentences}
+        extractedSentenceCount={extractedSentenceCount}
+        sentenceExtractionPages={sentenceExtractionPages}
+        onSentenceExtractionPagesChange={setSentenceExtractionPages}
+      />
+
+      {/* Main content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar
+          highlights={highlights}
+          resetHighlights={resetHighlights}
+          toggleDocument={toggleDocument}
+          scrolledToHighlightId={scrolledToHighlightId}
+          onEditHighlight={handleEditFromSidebar}
+          onDeleteHighlight={deleteHighlight}
+          isOpen={sidebarOpen}
+        />
+
+        {/* PDF Viewer with Left Panel */}
+        <div className="relative flex-1 overflow-hidden flex h-full">
+          <PdfLoader document={url}>
+            {(pdfDocument) => {
+              pdfDocumentRef.current = pdfDocument;
+
+              return (
+                <div className="flex h-full w-full">
+                {/* Left Panel - Outline & Thumbnails */}
+                <LeftPanel
+                  pdfDocument={pdfDocument}
+                  viewer={highlighterUtilsRef.current?.getViewer()}
+                  linkService={highlighterUtilsRef.current?.getLinkService()}
+                  eventBus={highlighterUtilsRef.current?.getEventBus()}
+                  goToPage={highlighterUtilsRef.current?.goToPage}
+                  isOpen={leftPanelOpen}
+                  onOpenChange={setLeftPanelOpen}
+                  width={280}
+                  defaultTab="outline"
+                />
+
+                {/* PDF Highlighter */}
+                <div className="flex-1 relative overflow-hidden">
+                  <PdfHighlighter
+                    enableAreaSelection={(event) => event.altKey || areaMode}
+                    areaSelectionMode={areaMode}
+                    pdfDocument={pdfDocument}
+                    theme={{ mode: darkMode ? "dark" : "light" }}
+                    onScrollAway={resetHash}
+                    utilsRef={(_pdfHighlighterUtils) => {
+                      highlighterUtilsRef.current = _pdfHighlighterUtils;
+                      // Only force update ONCE to prevent infinite re-render loop
+                      if (!hasInitializedUtilsRef.current) {
+                        hasInitializedUtilsRef.current = true;
+                        forceUpdate({});
+                      }
+                    }}
+                    pdfScaleValue={pdfScaleValue}
+                    textSelectionColor={highlightPen ? "rgba(255, 226, 143, 1)" : undefined}
+                    onSelection={highlightPen ? (selection) => {
+                      addHighlight(selection.makeGhostHighlight(), "");
+                    } : undefined}
+                    selectionTip={highlightPen ? undefined : (
+                      <ExpandableTip
+                        addHighlight={(highlight, comment) => {
+                          addHighlight(highlight, comment);
+                          if (areaMode) setAreaMode(false);
+                        }}
+                      />
+                    )}
+                    highlights={highlights}
+                    enableFreetextCreation={() => freetextMode}
+                    onFreetextClick={handleFreetextClick}
+                    enableImageCreation={() => imageMode}
+                    onImageClick={handleImageClick}
+                    enableDrawingMode={drawingMode}
+                    onDrawingComplete={handleDrawingComplete}
+                    onDrawingCancel={handleDrawingCancel}
+                    drawingStrokeColor={drawingStrokeColor}
+                    drawingStrokeWidth={drawingStrokeWidth}
+                    enableShapeMode={shapeMode}
+                    onShapeComplete={handleShapeComplete}
+                    onShapeCancel={handleShapeCancel}
+                    shapeStrokeColor={shapeStrokeColor}
+                    shapeStrokeWidth={shapeStrokeWidth}
+                    style={{
+                      height: "100%",
+                    }}
+                  >
+                    <HighlightContainer
+                      editHighlight={editHighlight}
+                      deleteHighlight={(id) => deleteHighlight({ id } as Highlight)}
+                      onContextMenu={handleContextMenu}
+                      noteCompactMode={noteCompactMode}
+                    />
+                  </PdfHighlighter>
+                </div>
+                </div>
+              );
+            }}
+          </PdfLoader>
+
+          {/* Floating Actions */}
+          <FloatingActions
+            highlightPen={highlightPen}
+            onToggleHighlightPen={() => setHighlightPen(!highlightPen)}
+            freetextMode={freetextMode}
+            onToggleFreetextMode={() => setFreetextMode(!freetextMode)}
+            noteCompactMode={noteCompactMode}
+            onToggleNoteCompactMode={() => setNoteCompactMode(!noteCompactMode)}
+            areaMode={areaMode}
+            onToggleAreaMode={() => setAreaMode(!areaMode)}
+            onAddImage={handleAddImage}
+            onAddSignature={handleAddSignature}
+            drawingMode={drawingMode}
+            onToggleDrawingMode={() => setDrawingMode(!drawingMode)}
+            drawingStrokeColor={drawingStrokeColor}
+            onDrawingColorChange={setDrawingStrokeColor}
+            drawingStrokeWidth={drawingStrokeWidth}
+            onDrawingWidthChange={setDrawingStrokeWidth}
+            shapeMode={shapeMode}
+            onSetShapeMode={setShapeMode}
+            shapeStrokeColor={shapeStrokeColor}
+            onShapeColorChange={setShapeStrokeColor}
+            shapeStrokeWidth={shapeStrokeWidth}
+            onShapeWidthChange={setShapeStrokeWidth}
+          />
+        </div>
+      </div>
+
+      {contextMenu && <ContextMenu {...contextMenu} />}
+
+      {/* Hidden file input for image upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: "none" }}
+        accept="image/*"
+        onChange={handleFileSelect}
+      />
+
+      {/* Signature pad modal */}
+      <SignaturePad
+        isOpen={isSignaturePadOpen}
+        onComplete={handleSignatureComplete}
+        onClose={() => setIsSignaturePadOpen(false)}
+      />
+    </div>
+  );
+};
+
+export default App;
