@@ -23,8 +23,7 @@ A modern, interactive PDF annotation web application built with React and TypeSc
 
 The application provides a three-panel interface with annotation management on the left, document outline and page navigation in the center, and the PDF viewer on the right.
 
-![PDF Annotator application preview](<img width="1894" height="1060" alt="image" src="https://github.com/user-attachments/assets/3148e9c2-581e-41a3-b973-24eb3ce7711b" />
-)
+![PDF Annotator application preview](<img src="screenshots/pdf-annotator.png" alt="PDF Annotator Preview" width="100%">)
 
 > To display the preview image, save a screenshot of your application as `pdf-annotator-preview.png` inside the `docs` folder.
 
